@@ -1,0 +1,25 @@
+# environments (made by setup/setup_envs.py)
+.venv-main/
+.venv-paddle/
+.venv*/
+# results and generated files: never commit OCR output or page data
+output/
+page_filter/work/
+page_filter/output/
+*.tmp
+__pycache__/
+# page images (they live outside the repository, see input_root in settings.yaml)
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+# page filter training runs: keep only the trained model
+page_filter/runs/**
+!page_filter/runs/
+!page_filter/runs/page_filter/
+!page_filter/runs/page_filter/weights/
+!page_filter/runs/page_filter/weights/best.pt
+# base weights that Ultralytics downloads by itself
+page_filter/*.pt
+page_filter/weights/

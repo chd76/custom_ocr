@@ -1,0 +1,7 @@
+# PaddleOCR environment (.venv-paddle): stages pages, paddle, csv, check and compare_runs.py.
+# paddlepaddle-gpu comes from the Paddle CUDA index chosen in setup_envs.py (default cu129: needed for RTX 50xx / Blackwell).
+paddlepaddle-gpu==3.4.0
+paddleocr[doc-parser]==3.7.0
+pyyaml
+shapely
+pillow

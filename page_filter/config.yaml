@@ -1,0 +1,24 @@
+# Settings for the page filter (whole page -> keep / mixed / trash). Paths are relative to this folder (page_filter/).
+# This folder only READS the page images; everything it makes stays inside it.
+
+images: ../../newspaper_data       # scanned pages (read-only): the same folder as input_root in settings.yaml
+labels: labels.csv            # your page labels: one row per page (page, category)
+pending: pending_review.txt   # pages pre-labeled by the model that you haven't checked yet
+
+# Page labels, in key order (key 1, 2, 3 in the labeler):
+#   keep  = the page has articles worth extracting (news, front page, columns, magazine, sports, ...)
+#   mixed = real articles AND a big non-article part (about 1/3 or more ads/classifieds) - still processed
+#   trash = nothing worth extracting (full-page ad, classifieds, puzzles, TV guide, ...) - skipped
+categories: [keep, mixed, trash]
+skip: [trash]                 # predict.py writes use_page = no for these
+
+model:                        # YOLO classification model
+  base: yolo26n-cls.pt        # bigger = more accurate, slower: yolo26s-cls.pt, yolo26m-cls.pt
+  imgsz: 640                  # the page is shrunk to this size; the overall layout is what matters
+  epochs: 50
+  batch: 16
+  fliplr: 0.0                 # no mirrored pages
+  val_fraction: 0.2           # pages held out to check the model
+  seed: 0
+
+review_below: 0.80            # predictions with lower confidence are marked "check" in predict.py's CSV

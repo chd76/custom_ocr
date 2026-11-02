@@ -1,0 +1,111 @@
+# Newspaper pages -> CSV of text groups (PaddleOCR PP-StructureV3).
+# Paths are relative to this folder. Any setting can be changed for one run without editing this file:
+#     python run.py --set paddle.init.text_det_thresh=0.25 --set run_name=det025
+
+# ------------------------------------------------------------------ input
+input_root: ../newspaper_data  # folder that holds the day folders ("12 HAZİRAN 2011", "13 HAZİRAN 2011", ...);
+                               # outside the project (absolute paths work too). The page images are NOT in this repository.
+                               # A day folder holds newspaper folders "NAME(id)", e.g. "AKŞAM ANKARA(6573)",
+                               # which hold the pages "<page number>_<image id>.jpg"
+
+# ------------------------------------------------------------------ which stages run.py runs (true / false)
+stages:
+  pages: true      # 1. list every page of every day folder, with date / newspaper / page number
+  filter: true     # 2. keep / mixed / trash for every page (your page_filter labels first, else the page_filter model)
+  paddle: true     # 3. PaddleOCR on the used pages (keep + mixed): text blocks, articles (regions), text
+  csv: true        # 4. the output table: runs/<run_name>/days/<date>.csv per day + all_data.csv (all days)
+  check: false     # 5. pictures of each page with articles and groups drawn on, to check by eye
+
+# ------------------------------------------------------------------ which pages (for stages 2, 3, 5; stage 1 always lists all)
+select:
+  days: []                     # e.g. [20110612]; empty = all days
+  newspapers: []               # newspaper ids, e.g. [451, 4747]; empty = all
+  pages: []                    # page file names without .jpg (or page ids), e.g. [11_350977398]; empty = all
+  limit: null                  # only the first N selected pages (for quick tests)
+  draw: null                   # name of a random page draw, e.g. draw01; its pages are saved in output/draws/draw01.csv
+                               # and every later run with the same name uses exactly those pages (fair comparisons)
+  random: null                 # how many used (keep/mixed) pages to draw the FIRST time a draw name is used, e.g. 50
+  exclude_used: false          # false = draw from ALL keep/mixed pages; true = leave out pages of earlier test runs
+                               # (runs with a page selection; whole-day runs don't count) and of earlier draws
+
+redo: false                    # true = redo pages that already have results (otherwise they are skipped)
+
+# ------------------------------------------------------------------ Python environments (each stage runs in its own)
+python:                        # environment folders (made by setup/setup_envs.py); Windows and Linux both work
+  filter: .venv-main             # ultralytics + PyTorch: page_filter model
+  default: .venv-paddle          # PaddleOCR: all other stages
+
+# ------------------------------------------------------------------ stage 2: page filter
+page_filter:
+  folder: page_filter                            # labels.csv, pending_review.txt, config.yaml and the model are read from here (never changed)
+  model: runs/page_filter/weights/best.pt        # relative to the folder above
+  use: [keep, mixed]                             # these go to PaddleOCR; anything else (trash) is skipped
+  trash_min_confidence: 0.90                     # the MODEL may only trash a page when it is at least this sure;
+                                                 # below it the page is kept (zero tolerance for losing useful pages).
+                                                 # Your own labels are always followed.
+  batch: 16
+
+# ------------------------------------------------------------------ stage 3: PaddleOCR
+run_name: default              # results go to output/runs/<run_name>/ - use a new name to compare settings
+
+paddle:
+  init:                        # arguments of paddleocr.PPStructureV3(...); null = Paddle's default
+    device: gpu:0              # cpu works too (much slower)
+    lang: tr                   # Turkish -> Latin recognition model (ignored if text_recognition_model_name is set)
+    ocr_version: PP-OCRv5
+    use_region_detection: true # the ARTICLE step: PP-DocBlockLayout boxes article areas; each text block belongs to one
+    use_doc_orientation_classify: false
+    use_doc_unwarping: false
+    use_textline_orientation: false
+    use_table_recognition: false
+    use_formula_recognition: false
+    use_chart_recognition: false
+    use_seal_recognition: false
+    layout_detection_model_name: null    # default PP-DocLayout_plus-L
+    region_detection_model_name: null    # default PP-DocBlockLayout
+    layout_threshold:                    # per class (PP-DocLayout_plus-L); 1.01 = never: IMAGES AND CHARTS ARE IGNORED, so a
+                                         # big photo box can't swallow the text on it (tabloid front pages). Others = Paddle's defaults.
+      {0: 0.3, 1: 1.01, 2: 0.4, 3: 0.5, 4: 0.5, 5: 0.5, 6: 0.5, 7: 0.3, 8: 0.5, 9: 0.5,
+       10: 0.5, 11: 0.5, 12: 0.5, 13: 0.5, 14: 0.5, 15: 0.45, 16: 1.01, 17: 0.5, 18: 0.5, 19: 0.5}
+      # 0 paragraph_title, 1 image, 2 text, 3 number, 4 abstract, 5 content, 6 figure_title, 7 formula, 8 table, 9 reference,
+      # 10 doc_title, 11 footnote, 12 header, 13 algorithm, 14 footer, 15 seal, 16 chart, 17 formula_number, 18 aside_text, 19 reference_content
+    layout_nms: null
+    layout_unclip_ratio: null
+    layout_merge_bboxes_mode: null       # large / small / union
+    text_detection_model_name: PP-OCRv6_medium_det     # text line detection
+    text_recognition_model_name: PP-OCRv6_medium_rec   # text reading (reads Turkish); lang / ocr_version are then ignored
+    text_det_limit_side_len: null        # default 736 with limit_type min (= the full page size is kept)
+    text_det_limit_type: null
+    text_det_thresh: null                # default 0.3
+    text_det_box_thresh: null            # default 0.6
+    text_det_unclip_ratio: 1.3           # line box size (Paddle default 1.5): 1.3 keeps lines from reaching into headlines and
+                                         # neighbouring blocks; tightly set lines can get clipped letters
+    text_rec_score_thresh: null          # default 0.0 (keep every line)
+    text_recognition_batch_size: null
+  predict: {}                  # extra arguments for .predict(...), same names as above (thresholds etc.)
+  drop_bogus_lines:            # before Paddle sorts a block's lines: drop pieces with no text, and pieces much taller
+    enabled: true              # than the normal lines (they glue lines together and shuffle the text, e.g. a strip
+    tall_factor: 2.5           # over the stacked hyphens at a column edge); only in blocks with 3+ lines
+  line_owner:                  # a text line touching several layout blocks (> 3 px) goes only to the block holding most of
+    enabled: true              # it, instead of Paddle cutting it once per block as a straight rectangle (thin strips that
+    split_share: 0.3           # read as nonsense, half lines, tilted text cut through 2-3 lines). Paddle still splits a line
+    split_height: 0.6          # that runs across blocks side by side: 2nd block holds >= split_share of it, both hold
+                               # >= split_height of its height
+
+# ------------------------------------------------------------------ stage 4: all_data.csv
+merge_text_blocks: true        # true = join a text block with the one before it: same article, right below it in the same column
+skip_labels:                   # Paddle block types that are NOT text groups (they stay in the table as row_type = skipped_block)
+  [image, chart, seal, header, header_image, footer, footer_image, number, formula, formula_number, table, algorithm]
+# IDs (text, fixed width, each level starts with the one above it):
+#   page     20110612-07739-008-2              date (YYYYMMDD), newspaper (id from the folder name), page, version
+#   article  20110612-07739-008-2-003
+#   row      20110612-07739-008-2-003-001      article, group (text chunk) inside the article
+#   article 000 = not in an article (skipped block); group 000 = the whole page (page without results)
+# version = 1 normally; 2, 3 when the same page number exists twice in one newspaper and day (e.g. two editions of page 8).
+# Stage 1 stops with an error if a value doesn't fit its width. Changing a width changes every id: then rerun stage 1 and --redo.
+id_widths:
+  newspaper: 5
+  page: 3
+  version: 1
+  article: 3
+  group: 3

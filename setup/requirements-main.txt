@@ -1,0 +1,7 @@
+# Main environment (.venv-main): page filter tool + page filter model (ultralytics / PyTorch).
+# torch / torchvision come from the PyTorch CUDA index chosen in setup_envs.py (default cu128).
+torch==2.11.0
+torchvision==0.26.0
+ultralytics==8.4.177
+pyyaml
+pillow
